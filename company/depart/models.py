@@ -1,29 +1,6 @@
 from django.db import models
-from django.utils.timezone import datetime
-
-
-class Director(models.Model):
-    '''
-    Модель для директора департамента.
-    '''
-
-    name = models.CharField(max_length=200, verbose_name='Имя начальника')
-    last_name = models.CharField(max_length=200, verbose_name='Имя начальника')
-    position = models.CharField(max_length=256, verbose_name='Роль')
-    salary = models.DecimalField(
-        max_digits=9,
-        decimal_places=3,
-        verbose_name='Зарплата'
-    )
-    birth_date = models.DateField(verbose_name='дата рождения')
-
-    def get_age(self):
-        age = datetime.date.today()-self.birth_date
-        return int((age).days/365.25)
-    
-    @property
-    def full_name(self):
-        return f'{self.name} {self.last_name}'
+from django.utils.timezone import now
+from django.core.exceptions import ValidationError
 
 
 class Departament(models.Model):
@@ -36,21 +13,17 @@ class Departament(models.Model):
         verbose_name='Название департамента'
     )
 
-    boss = models.OneToOneField(
-        Director,
-        on_delete=models.DO_NOTHING,
-        related_name='depart',
-        verbose_name='Директор департамента',
-    )
-
 
 class Employee(models.Model):
     '''
-    Модель для директора работника.
+    Модель для всех работников(Директора и обычные работники).
     '''
 
     name = models.CharField(max_length=200, verbose_name='Имя сотрудника')
-    last_name = models.CharField(max_length=200, verbose_name='Фамилия сотрудника')
+    last_name = models.CharField(
+        max_length=200,
+        verbose_name='Фамилия сотрудника'
+    )
     position = models.CharField(max_length=256, verbose_name='Роль')
     salary = models.DecimalField(
         max_digits=9,
@@ -60,15 +33,47 @@ class Employee(models.Model):
     birth_date = models.DateField()
     depart = models.ForeignKey(
         Departament,
-        related_name='empoyee',
-        verbose_name='работники департамента',
-        on_delete=models.DO_NOTHING
+        on_delete=models.DO_NOTHING,
+        related_name='employee',
+        verbose_name='Pаботник департамента',
     )
 
+    @property
     def get_age(self):
-        age = datetime.date.today()-self.birth_date
-        return int((age).days/365.25)
+        if self.birth_date:
+            current_age = now().date().year - self.birth_date.year
+            return current_age
+        return 0
 
     @property
     def full_name(self):
         return f'{self.name} {self.last_name}'
+    
+
+class DirectorDepart(models.Model):
+    '''
+    Модель для директоров департамента.
+    '''
+
+    director = models.OneToOneField(
+        Employee,
+        on_delete=models.DO_NOTHING,
+        related_name='boss_of_depart',
+        verbose_name='Директор департамента'
+    )
+    depart = models.OneToOneField(
+        Departament,
+        on_delete=models.DO_NOTHING,
+        related_name='depart',
+        verbose_name='Название департамента'
+    )
+
+    def clean(self):
+        if self.depart != self.director.depart:
+            raise ValidationError(
+                {'depart': "Сотрудник может быть директором департамента, в котором он работает"}
+            )
+        
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
